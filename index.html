@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prime Tickets Access - Movie Booking</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.1/build/qrcode.min.js"></script>
+    <style>
+        body {
+            background-color: #111111;
+            font-family: 'Inter', sans-serif;
+            min-height: 100vh;
+        }
+        .app-card {
+            background-color: #222222;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+        }
+        .input-field {
+            background-color: #333333;
+            color: white;
+            border: 1px solid #444444;
+            transition: border-color 0.2s;
+        }
+        .input-field:focus {
+            border-color: #FF0000;
+            outline: none;
+        }
+        .red-text {
+            color: #FF0000;
+        }
+        .seat-available { background-color: #10b981; color: white; }
+        .seat-selected { background-color: #f59e0b; color: white; }
+        .seat-booked { background-color: #6b7280; color: white; }
+        .seat-vip { border: 2px solid #FF0000; background-color: #ffcc00; color: black; } /* VIP seats style */
+        .vip-section { margin-bottom: 2rem; border-bottom: 1px solid #444444; padding-bottom: 1rem; }
+        .normal-section { padding-top: 1rem; }
+        .seat-layout { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .seat-row { display: flex; align-items: center; gap: 5px; }
+        .seat { width: 40px; height: 40px; font-size: 12px; display: flex; align-items: center; justify-content: center; border-radius: 4px; }
+        .seat-label { font-size: 12px; color: #aaaaaa; text-align: center; margin-bottom: 5px; width: 40px; }
+        .scrollable { max-height: 60vh; overflow-y: auto; }
+        .admin-panel { border: 2px solid #FF0000; }
+        .table-container { max-height: 50vh; overflow-y: auto; }
+        .table th, .table td { border: 1px solid #444444; padding: 8px; }
+        #qrCode { max-width: 200px; margin: 0 auto; }
+        .email-notification { 
+            background-color: #10b981; 
+            color: white; 
+            padding: 1rem; 
+            border-radius: 0.5rem; 
+            margin-bottom: 1rem; 
+            text-align: center;
+        }
+        /* Screen Preview Styles */
+        .preview-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+        .preview-content {
+            background: #222222;
+            padding: 1.5rem;
+            border-radius: 0.5rem;
+            border: 2px solid #FF0000;
+            text-align: center;
+            max-width: 90%;
+            width: 400px;
+        }
+        .preview-screen {
+            perspective: 1000px;
+            height: 200px;
+            margin: 1rem auto;
+            border: 2px solid #FF0000;
+            border-radius: 0.25rem;
+            overflow: hidden;
+            background: #000000;
+        }
+        .screen-3d {
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #000000, #111111);
+            transform-style: preserve-3d;
+            transition: transform 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #ffffff;
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        .preview-overlay {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #FF0000;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+        @media (max-width: 640px) {
+            .seat { width: 30px; height: 30px; font-size: 10px; }
+            .seat-label { font-size: 10px; width: 30px; }
+            .seat-row { gap: 3px; }
+            .seat-layout { gap: 3px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Login Screen -->
+    <div id="loginScreen" class="w-full max-w-sm mx-auto p-4 md:p-8 rounded-lg app-card">
+        <div class="flex justify-between items-center mb-6">
+            <h1 class="text-3xl font-bold red-text">Prime Tickets</h1>
+        </div>
+
+        <div class="mt-8">
+            <h2 class="text-xl font-semibold red-text mb-6 text-center">Access Prime Tickets</h2>
+            <div class="space-y-4 mb-4">
+                <input type="email" id="email" placeholder="Enter Email" class="input-field w-full p-3 rounded-md">
+                <input type="password" id="password" placeholder="Enter Password" class="input-field w-full p-3 rounded-md">
+            </div>
+
+            <div id="messageBox" class="text-center text-sm mb-4 h-8"></div>
+
+            <div class="flex justify-between gap-3">
+                <button onclick="registerUser()" class="w-1/2 p-3 rounded-md bg-gray-600 text-white hover:bg-gray-700 transition duration-200 flex items-center justify-center font-semibold">
+                    Register
+                </button>
+                <button onclick="signInUser()" class="w-1/2 p-3 rounded-md bg-red-600 text-white hover:bg-red-700 transition duration-200 flex items-center justify-center font-semibold">
+                    Sign In
+                </button>
+            </div>
+
+            <p class="text-xs text-gray-500 text-center mt-3">
+                <span class="text-green-500 font-semibold">Customer:</span> Any email/password
+            </p>
+        </div>
+    </div>
+
+    <!-- Customer Dashboard -->
+    <div id="customerDashboard" class="hidden w-full max-w-6xl mx-auto p-4 md:p-8 rounded-lg app-card text-white">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-3xl font-bold red-text">Welcome, <span id="welcomeEmail"></span>!</h2>
+                <p class="text-sm text-gray-400">Book your movie tickets</p>
+            </div>
+            <button onclick="logoutUser()" class="p-3 rounded-md bg-gray-600 text-white hover:bg-gray-700 transition duration-200">
+                Logout
+            </button>
+        </div>
+        <div id="customerBookingFlow">
+            <div id="stepTheater" class="booking-step">
+                <h3 class="text-2xl font-semibold red-text mb-6">Select Theater</h3>
+                <div id="theaterList" class="grid grid-cols-1 md:grid-cols-2 gap-4 scrollable"></div>
+            </div>
+            <div id="stepCinema" class="booking-step hidden">
+                <button onclick="goBack('cinema')" class="mb-6 p-2 bg-gray-600 rounded-md hover:bg-gray-500">← Back</button>
+                <h3 id="cinemaTitle" class="text-2xl font-semibold red-text mb-6"></h3>
+                <div id="cinemaList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+            <div id="stepMovie" class="booking-step hidden">
+                <button onclick="goBack('movie')" class="mb-6 p-2 bg-gray-600 rounded-md hover:bg-gray-500">← Back</button>
+                <h3 id="movieTitle" class="text-2xl font-semibold red-text mb-6"></h3>
+                <div id="movieList" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+            </div>
+            <div id="stepTiming" class="booking-step hidden">
+                <button onclick="goBack('timing')" class="mb-6 p-2 bg-gray-600 rounded-md hover:bg-gray-500">← Back</button>
+                <h3 id="timingTitle" class="text-2xl font-semibold red-text mb-6"></h3>
+                <div id="timingList" class="grid grid-cols-2 md:grid-cols-4 gap-3"></div>
+            </div>
+            <div id="stepSeats" class="booking-step hidden">
+                <button onclick="goBack('seats')" class="mb-6 p-2 bg-gray-600 rounded-md hover:bg-gray-500">← Back</button>
+                <h3 id="seatsTitle" class="text-2xl font-semibold red-text mb-6"></h3>
+                <div class="flex gap-8 mb-6">
+                    <div class="flex-1">
+                        <div class="bg-gray-800 p-4 rounded-lg text-center mb-4">🗺️ Screen</div>
+                        <div id="normalSeatLayout" class="normal-section bg-gray-800 p-4 rounded-lg mx-auto max-w-xs">
+                            <div class="text-center font-semibold mb-2">Normal Seats</div>
+                            <div class="seat-layout" id="normalSeatsGrid"></div>
+                        </div>
+                        <div id="vipSeatLayout" class="vip-section bg-gray-800 p-4 rounded-lg mx-auto max-w-xs">
+                            <div class="text-center font-semibold red-text mb-2">VIP Seats</div>
+                            <div class="seat-layout" id="vipSeatsGrid"></div>
+                        </div>
+                        <button id="previewBtn" onclick="showScreenPreview()" class="mt-4 w-full p-3 rounded-md bg-red-600 text-white hover:bg-red-700 transition duration-200 font-semibold hidden">
+                            Preview Screen
+                        </button>
+                    </div>
+                    <div class="flex-1">
+                        <h4 class="font-semibold mb-4">Selected Seats: <span id="selectedCount" class="red-text">0</span></h4>
+                        <div id="selectedSeats" class="bg-gray-800 p-4 rounded-lg h-64 overflow-y-auto text-sm"></div>
+                        <div class="mt-4">
+                            <label class="block text-sm mb-2">Number of Tickets:</label>
+                            <input type="number" id="ticketCount" min="1" max="10" value="1" class="input-field w-full p-2 rounded-md">
+                        </div>
+                        <button onclick="selectAllAvailable()" class="mt-2 w-full p-2 rounded-md bg-blue-600 text-white hover:bg-blue-700">Select All Available</button>
+                        <button onclick="deselectAllSeats()" class="mt-2 w-full p-2 rounded-md bg-orange-600 text-white hover:bg-orange-700">Deselect All</button>
+                    </div>
+                </div>
+                <div class="text-sm text-gray-400 mb-4 seat-legend">
+                    <div class="flex items-center mr-4"><div class="w-4 h-4 seat-available mr-2"></div> Available (₹200)</div>
+                    <div class="flex items-center mr-4"><div class="w-4 h-4 seat-vip mr-2"></div> VIP (₹300)</div>
+                    <div class="flex items-center mr-4"><div class="w-4 h-4 seat-selected mr-2"></div> Selected</div>
+                    <div class="flex items-center"><div class="w-4 h-4 seat-booked mr-2"></div> Booked</div>
+                </div>
+                <button onclick="proceedToPayment()" class="w-full p-3 rounded-md bg-red-600 text-white hover:bg-red-700 transition duration-200 font-semibold">
+                    Proceed to Payment (₹<span id="totalAmount">0</span>)
+                </button>
+            </div>
+            <div id="stepContact" class="booking-step hidden">
+                <button onclick="goBack('contact')" class="mb-6 p-2 bg-gray-600 rounded-md hover:bg-gray-500">← Back</button>
+                <h3 class="text-2xl font-semibold red-text mb-6">Contact Details</h3>
+                <div id="contactError" class="text-center text-sm mb-4 text-red-400 hidden"></div>
+                <div class="space-y-4 mb-6">
+                    <input type="text" id="customerName" placeholder="Full Name" class="input-field w-full p-3 rounded-md">
+                    <input type="tel" id="phoneNumber" placeholder="Phone Number" class="input-field w-full p-3 rounded-md">
+                    <input type="email" id="customerEmail" placeholder="Email Address" class="input-field w-full p-3 rounded-md">
+                </div>
+                <div class="bg-gray-800 p-4 rounded-lg mb-6">
+                    <h4 class="font-semibold mb-3">Booking Summary</h4>
+                    <div id="bookingSummary" class="text-sm space-y-2"></div>
+                </div>
+                <button onclick="confirmBooking()" class="w-full p-3 rounded-md bg-green-600 text-white hover:bg-green-700 transition duration-200 font-semibold">
+                    Confirm Booking & Pay
+                </button>
+            </div>
+            <div id="stepConfirmation" class="booking-step hidden text-center">
+                <div id="emailNotification" class="email-notification hidden">
+                    Booking confirmation email sent to <span id="emailSentTo"></span>!
+                </div>
+                <div id="smsNotification" class="email-notification hidden">
+                    Booking confirmation SMS sent to <span id="smsSentTo"></span>!
+                </div>
+                <div class="bg-green-600 text-white p-8 rounded-lg mb-6">
+                    <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
+                    </svg>
+                    <h3 class="text-2xl font-bold mb-2">Booking Confirmed!</h3>
+                </div>
+                <div id="confirmationDetails" class="bg-gray-800 p-6 rounded-lg mb-6 text-left"></div>
+                <div class="bg-gray-800 p-6 rounded-lg mb-6">
+                    <h4 class="font-semibold mb-3 text-center">Booking QR Code</h4>
+                    <div id="qrCode"></div>
+                </div>
+                <button onclick="resetBooking()" class="w-full p-3 rounded-md bg-red-600 text-white hover:bg-red-700 transition duration-200 font-semibold">
+                    Book Another Ticket
+                </button>
+            </div>
+            <!-- Screen Preview Modal -->
+            <div id="previewModal" class="preview-modal">
+                <div class="preview-content">
+                    <h3 class="text-xl font-semibold red-text mb-4">View from Seat <span id="previewSeatLabel"></span></h3>
+                    <div class="preview-screen">
+                        <div class="screen-3d" id="screen3D">
+                            <div class="preview-overlay">Screen View</div>
+                        </div>
+                    </div>
+                    <button onclick="closeScreenPreview()" class="mt-4 p-3 rounded-md bg-red-600 text-white hover:bg-red-700 transition duration-200 font-semibold">
+                        Close
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Admin Dashboard -->
+    <div id="adminDashboard" class="hidden w-full max-w-7xl mx-auto p-4 md:p-8 rounded-lg app-card text-white admin-panel">
+        <div class="flex justify-between items-center mb-6">
+            <div>
+                <h2 class="text-3xl font-bold red-text">Admin Panel</h2>
+                <p class="text-sm text-gray-400">Manage Theaters, Cinemas, Movies, Shows, and Reports</p>
+            </div>
+            <button onclick="logoutUser()" class="p-3 rounded-md bg-gray-600 text-white hover:bg-gray-700 transition duration-200">
+                Logout
+            </button>
+        </div>
+        <div class="flex mb-6">
+            <button onclick="showAdminTab('theaters')" class="flex-1 p-3 bg-gray-600 rounded-l-md hover:bg-gray-500">Theaters</button>
+            <button onclick="showAdminTab('cinemas')" class="flex-1 p-3 bg-gray-600 hover:bg-gray-500">Cinemas</button>
+            <button onclick="showAdminTab('movies')" class="flex-1 p-3 bg-gray-600 hover:bg-gray-500">Movies</button>
+            <button onclick="showAdminTab('shows')" class="flex-1 p-3 bg-gray-600 hover:bg-gray-500">Shows</button>
+            <button onclick="showAdminTab('seats')" class="flex-1 p-3 bg-gray-600 hover:bg-gray-500">Seats</button>
+            <button onclick="showAdminTab('reports')" class="flex-1 p-3 bg-gray-600 rounded-r-md hover:bg-gray-500">Booking Reports</button>
+        </div>
+        <div id="adminTheaters" class="admin-tab">
+            <h3 class="text-2xl font-semibold red-text mb-4">Manage Theaters</h3>
+            <div class="flex gap-4 mb-4">
+                <input id="newTheaterName" placeholder="Theater Name" class="input-field flex-1 p-2">
+                <button onclick="addTheater()" class="p-2 bg-green-600 rounded-md text-white">Add Theater</button>
+            </div>
+            <div id="theaterListAdmin" class="space-y-2"></div>
+        </div>
+        <div id="adminCinemas" class="admin-tab hidden">
+            <h3 class="text-2xl font-semibold red-text mb-4">Manage Cinemas</h3>
+            <select id="theaterSelectForCinema" class="input-field w-full mb-4 p-2">
+                <option value="">Select Theater</option>
+            </select>
+            <div class="flex gap-4 mb-4">
+                <input id="newCinemaName" placeholder="Cinema Name" class="input-field flex-1 p-2">
+                <button onclick="addCinema()" class="p-2 bg-green-600 rounded-md text-white">Add Cinema</button>
+            </div>
+            <div id="cinemaListAdmin" class="space-y-2"></div>
+        </div>
+        <div id="adminMovies" class="admin-tab hidden">
+            <h3 class="text-2xl font-semibold red-text mb-4">Manage Movies</h3>
+            <select id="theaterSelectForMovie" class="input-field w-full mb-2 p-2">
+                <option value="">Select Theater</option>
+            </select>
+            <select id="cinemaSelectForMovie" class="input-field w-full mb-4 p-2">
+                <option value="">Select Cinema</option>
+            </select>
+            <div class="flex gap-4 mb-4">
+                <input id="newMovieName" placeholder="Movie Name" class="input-field flex-1 p-2">
+                <button onclick="addMovie()" class="p-2 bg-green-600 rounded-md text-white">Add Movie</button>
+            </div>
+            <div id="movieListAdmin" class="space-y-2"></div>
+        </div>
+        <div id="adminShows" class="admin-tab hidden">
+            <h3 class="text-2xl font-semibold red-text mb-4">Manage Show Timings</h3>
+            <select id="theaterSelectForShow" class="input-field w-full mb-2 p-2">
+                <option value="">Select Theater</option>
+            </select>
+            <select id="cinemaSelectForShow" class="input-field w-full mb-2 p-2">
+                <option value="">Select Cinema</option>
+            </select>
+            <select id="movieSelectForShow" class="input-field w-full mb-4 p-2">
+                <option value="">Select Movie</option>
+            </select>
+            <div class="flex gap-4 mb-4">
+                <input id="newShowTime" placeholder="Show Time (e.g., 10:00 AM)" class="input-field flex-1 p-2">
+                <button onclick="addShow()" class="p-2 bg-green-600 rounded-md text-white">Add Show</button>
+            </div>
+            <div id="showListAdmin" class="space-y-2"></div>
+        </div>
+        <div id="adminSeats" class="admin-tab hidden">
+            <h3 class="text-2xl font-semibold red-text mb-4">Manage Seats</h3>
+            <select id="theaterSelectForSeat" class="input-field w-full mb-2 p-2">
+                <option value="">Select Theater</option>
+            </select>
+            <select id="cinemaSelectForSeat" class="input-field w-full mb-2 p-2">
+                <option value="">Select Cinema</option>
+            </select>
+            <select id="movieSelectForSeat" class="input-field w-full mb-2 p-2">
+                <option value="">Select Movie</option>
+            </select>
+            <select id="timingSelectForSeat" class="input-field w-full mb-4 p-2">
+                <option value="">Select Show Timing</option>
+            </select>
+            <div class="flex gap-8 mb-6">
+                <div class="flex-1">
+                    <div class="bg-gray-800 p-4 rounded-lg text-center mb-4">🗺️ Screen</div>
+                    <div id="normalSeatLayoutAdmin" class="normal-section bg-gray-800 p-4 rounded-lg mx-auto max-w-xs">
+                        <div class="text-center font-semibold mb-2">Normal Seats</div>
+                        <div class="seat-layout" id="normalSeatsGridAdmin"></div>
+                    </div>
+                    <div id="vipSeatLayoutAdmin" class="vip-section bg-gray-800 p-4 rounded-lg mx-auto max-w-xs">
+                        <div class="text-center font-semibold red-text mb-2">VIP Seats</div>
+                        <div class="seat-layout" id="vipSeatsGridAdmin"></div>
+                    </div>
+                </div>
+                <div class="flex-1">
+                    <h4 class="font-semibold mb-4">Selected Seats to Book: <span id="selectedCountAdmin" class="red-text">0</span></h4>
+                    <div id="selectedSeatsAdmin" class="bg-gray-800 p-4 rounded-lg h-64 overflow-y-auto text-sm"></div>
+                    <button onclick="markAsBooked()" class="mt-4 w-full p-3 rounded-md bg-green-600 text-white hover:bg-green-700 transition duration-200 font-semibold">
+                        Mark as Booked
+                    </button>
+                    <button onclick="markAsAvailable()" class="mt-2 w-full p-3 rounded-md bg-orange-600 text-white hover:bg-orange-700 transition duration-200 font-semibold">
+                        Mark as Available
+                    </button>
+                    <button onclick="deselectAll()" class="mt-2 w-full p-3 rounded-md bg-red-600 text-white hover:bg-red-700 transition duration-200 font-semibold">
+                        Deselect All
+                    </button>
+                    <button onclick="selectAllAvailableAdmin()" class="mt-2 w-full p-3 rounded-md bg-blue-600 text-white hover:bg-blue-700 transition duration-200 font-semibold">
+                        Select All Available
+                    </button>
+                </div>
+            </div>
+            <div class="text-sm text-gray-400 mb-4 seat-legend">
+                <div class="flex items-center mr-4"><div class="w-4 h-4 seat-available mr-2"></div> Available (₹200)</div>
+                <div class="flex items-center mr-4"><div class="w-4 h-4 seat-vip mr-2"></div> VIP (₹300)</div>
+                <div class="flex items-center mr-4"><div class="w-4 h-4 seat-selected mr-2"></div> Selected</div>
+                <div class="flex items-center"><div class="w-4 h-4 seat-booked mr-2"></div> Booked</div>
+            </div>
+        </div>
+        <div id="adminReports" class="admin-tab hidden">
+            <h3 class="text-2xl font-semibold red-text mb-4">Booking Reports</h3>
+            <div class="flex gap-4 mb-4">
+                <select id="reportTheaterFilter" class="input-field flex-1 p-2">
+                    <option value="">All Theaters</option>
+                </select>
+                <select id="reportMovieFilter" class="input-field flex-1 p-2">
+                    <option value="">All Movies</option>
+                </select>
+                <button onclick="downloadReportCSV()" class="p-2 bg-green-600 rounded-md text-white">Download CSV</button>
+            </div>
+            <div class="table-container">
+                <table class="table w-full text-sm bg-gray-800 rounded">
+                    <thead>
+                        <tr class="bg-gray-700">
+                            <th>Booking ID</th>
+                            <th>Theater</th>
+                            <th>Cinema</th>
+                            <th>Movie</th>
+                            <th>Show Time</th>
+                            <th>Seats</th>
+                            <th>Total (₹)</th>
+                            <th>Name</th>
+                            <th>Phone</th>
+                            <th>Email</th>
+                        </tr>
+                    </thead>
+                    <tbody id="reportTableBody"></tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Storage Keys
+        const THEATERS_KEY = 'primeTheatersData';
+        const USERS_KEY = 'primeTicketsUsers';
+        const LOGGED_IN_KEY = 'primeTicketsLoggedInUser';
+        const BOOKINGS_KEY = 'primeTicketsBookings';
+        const SEATS_KEY = 'primeTicketsSeats';
+
+        // Pricing Constants
+        const NORMAL_PRICE = 200;
+        const VIP_PRICE = 300;
+        const VIP_ROWS_COUNT = 2; // 2 rows, 5 columns
+        const NORMAL_ROWS_COUNT = 5; // 5 rows, 5 columns
+
+        // Initialize default data - No defaults, admin must add
+        function initializeDefaultData() {
+            let data = JSON.parse(localStorage.getItem(THEATERS_KEY) || '{}');
+            if (Object.keys(data).length === 0) {
+                localStorage.setItem(THEATERS_KEY, JSON.stringify({}));
+            }
+        }
+
+        // Data access
+        function getTheatersData() {
+            return JSON.parse(localStorage.getItem(THEATERS_KEY) || '{}');
+        }
+
+        function saveTheatersData(data) {
+            localStorage.setItem(THEATERS_KEY, JSON.stringify(data));
+        }
+
+        function getSeatsData() {
+            return JSON.parse(localStorage.getItem(SEATS_KEY) || '{}');
+        }
+
+        function saveSeatsData(data) {
+            localStorage.setItem(SEATS_KEY, JSON.stringify(data));
+        }
+
+        // Authentication
+        let users = [];
+        const ADMIN_EMAIL = 'admin@test.com';
+        const ADMIN_PASSWORD = 'password123';
+
+        function initializeUsers() {
+            const storedUsers = localStorage.getItem(USERS_KEY);
+            if (storedUsers) {
+                users = JSON.parse(storedUsers);
+            } else {
+                users = [];
+            }
+            if (!users.find(u => u.email === ADMIN_EMAIL)) {
+                users.push({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD, isAdmin: true });
+            }
+            localStorage.setItem(USERS_KEY, JSON.stringify(users));
+        }
+
+        function displayMessage(text, isError = false) {
+            const messageBox = document.getElementById('messageBox');
+            messageBox.textContent = text;
+            messageBox.className = isError ? 'text-sm mb-4 h-8 text-red-400' : 'text-sm mb-4 h-8 text-green-400';
+            setTimeout(() => {
+                messageBox.textContent = '';
+                messageBox.className = 'text-center text-sm mb-4 h-8';
+            }, 3000);
+        }
+
+        function registerUser() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
+            if (!email || !password) return displayMessage('Please enter both email and password.', true);
+            if (users.find(u => u.email === email)) return displayMessage('Email already in use.', true);
+            users.push({ email, password, isAdmin: false });
+            localStorage.setItem(USERS_KEY, JSON.stringify(users));
+            displayMessage('Registration successful! Please sign in.');
+            document.getElementById('email').value = '';
+            document.getElementById('password').value = '';
+        }
+
+        function signInUser() {
+            const email = document.getElementById('email').value.trim();
+            const password = document.getElementById('password').value.trim();
+            const user = users.find(u => u.email === email && u.password === password);
+            if (user) {
+                localStorage.setItem(LOGGED_IN_KEY, JSON.stringify({ email: user.email, isAdmin: user.isAdmin }));
+                document.getElementById('email').value = '';
+                document.getElementById('password').value = '';
+                renderScreen();
+            } else {
+                displayMessage('Invalid credentials.', true);
+            }
+        }
+
+        function logoutUser() {
+            localStorage.removeItem(LOGGED_IN_KEY);
+            resetBooking();
+            renderScreen();
+        }
+
+        function renderScreen() {
+            const loggedInUser = JSON.parse(localStorage.getItem(LOGGED_IN_KEY) || 'null');
+            const loginScreen = document.getElementById('loginScreen');
+            const customerDashboard = document.getElementById('customerDashboard');
+            const adminDashboard = document.getElementById('adminDashboard');
+
+            loginScreen.classList.add('hidden');
+            customerDashboard.classList.add('hidden');
+            adminDashboard.classList.add('hidden');
+
+            if (loggedInUser) {
+                document.getElementById('welcomeEmail').textContent = loggedInUser.email;
+                if (loggedInUser.isAdmin) {
+                    adminDashboard.classList.remove('hidden');
+                    loadAdminPanel();
+                } else {
+                    customerDashboard.classList.remove('hidden');
+                    showStep('theater');
+                    loadTheaters();
+                }
+            } else {
+                loginScreen.classList.remove('hidden');
+            }
+        }
+
+        // Screen Preview Functions
+        function showScreenPreview() {
+            if (currentBooking.selectedSeats.length === 0) {
+                alert('Please select at least one seat to preview.');
+                return;
+            }
+            const seat = currentBooking.selectedSeats[0];
+            const seatLabel = seat.label;
+            document.getElementById('previewSeatLabel').textContent = seatLabel;
+            const angle = 30 - (seat.row * 5); // Row A: 30°, Row E: 10°
+            document.getElementById('screen3D').style.transform = `rotateX(${angle}deg)`;
+            document.getElementById('previewModal').style.display = 'flex';
+        }
+
+        function closeScreenPreview() {
+            document.getElementById('previewModal').style.display = 'none';
+        }
+
+        // ADMIN FUNCTIONS
+        function loadAdminPanel() {
+            showAdminTab('theaters');
+            updateSelectOptions();
+            updateReportFilters();
+        }
+
+        function showAdminTab(tab) {
+            document.querySelectorAll('.admin-tab').forEach(t => t.classList.add('hidden'));
+            document.getElementById(`admin${tab.charAt(0).toUpperCase() + tab.slice(1)}`).classList.remove('hidden');
+            loadAdminData(tab);
+        }
+
+        function updateSelectOptions() {
+            const data = getTheatersData();
+            const theaters = Object.keys(data);
+            ['theaterSelectForCinema', 'theaterSelectForMovie', 'theaterSelectForShow', 'theaterSelectForSeat', 'reportTheaterFilter'].forEach(id => {
+                const select = document.getElementById(id);
+                select.innerHTML = '<option value="">Select Theater / All Theaters</option>' + 
+                    theaters.map(t => `<option value="${t}">${t}</option>`).join('');
+            });
+        }
+
+        function loadAdminData(tab) {
+            const data = getTheatersData();
+            if (tab === 'theaters') {
+                const container = document.getElementById('theaterListAdmin');
+                container.innerHTML = Object.keys(data).map(t => `
+                    <div class="flex items-center p-2 bg-gray-800 rounded">
+                        <span class="flex-1">${t}</span>
+                        <button onclick="editTheater('${t}')" class="p-1 bg-blue-600 rounded mr-2">Edit</button>
+                        <button onclick="deleteTheater('${t}')" class="p-1 bg-red-600 rounded">Delete</button>
+                    </div>
+                `).join('');
+            } else if (tab === 'cinemas') {
+                const theater = document.getElementById('theaterSelectForCinema').value;
+                const container = document.getElementById('cinemaListAdmin');
+                container.innerHTML = '';
+                if (theater) {
+                    container.innerHTML = Object.keys(data[theater] || {}).map(c => `
+                        <div class="flex items-center p-2 bg-gray-800 rounded">
+                            <span class="flex-1">${c}</span>
+                            <button onclick="editCinema('${theater}', '${c}')" class="p-1 bg-blue-600 rounded mr-2">Edit</button>
+                            <button onclick="deleteCinema('${theater}', '${c}')" class="p-1 bg-red-600 rounded">Delete</button>
+                        </div>
+                    `).join('');
+                }
+            } else if (tab === 'movies') {
+                const theater = document.getElementById('theaterSelectForMovie').value;
+                const cinema = document.getElementById('cinemaSelectForMovie').value;
+                const container = document.getElementById('movieListAdmin');
+                container.innerHTML = '';
+                if (theater && cinema) {
+                    container.innerHTML = Object.keys(data[theater][cinema] || {}).map(m => `
+                        <div class="flex items-center p-2 bg-gray-800 rounded">
+                            <span class="flex-1">${m}</span>
+                            <button onclick="editMovie('${theater}', '${cinema}', '${m}')" class="p-1 bg-blue-600 rounded mr-2">Edit</button>
+                            <button onclick="deleteMovie('${theater}', '${cinema}', '${m}')" class="p-1 bg-red-600 rounded">Delete</button>
+                        </div>
+                    `).join('');
+                }
+            } else if (tab === 'shows') {
+                const theater = document.getElementById('theaterSelectForShow').value;
+                const cinema = document.getElementById('cinemaSelectForShow').value;
+                const movie = document.getElementById('movieSelectForShow').value;
+                const container = document.getElementById('showListAdmin');
+                container.innerHTML = '';
+                if (theater && cinema && movie) {
+                    const shows = data[theater][cinema][movie] || [];
+                    container.innerHTML = shows.map((s, index) => `
+                        <div class="flex items-center p-2 bg-gray-800 rounded">
+                            <span class="flex-1">${s}</span>
+                            <button onclick="editShow('${theater}', '${cinema}', '${movie}', ${index}, '${s}')" class="p-1 bg-blue-600 rounded mr-2">Edit</button>
+                            <button onclick="deleteShow('${theater}', '${cinema}', '${movie}', ${index})" class="p-1 bg-red-600 rounded">Delete</button>
+                        </div>
+                    `).join('');
+                }
+            } else if (tab === 'seats') {
+                loadAdminSeats();
+            } else if (tab === 'reports') {
+                loadBookingReports();
+            }
+        }
+
+        function addTheater() {
+            const name = document.getElementById('newTheaterName').value.trim();
+            if (!name) return alert('Enter theater name');
+            const data = getTheatersData();
+            if (!data[name]) data[name] = {};
+            saveTheatersData(data);
+            document.getElementById('newTheaterName').value = '';
+            loadAdminData('theaters');
+            updateSelectOptions();
+        }
+
+        function editTheater(oldName) {
+            const newName = prompt('Enter new name for ' + oldName, oldName);
+            if (newName && newName !== oldName) {
+                const data = getTheatersData();
+                data[newName] = data[oldName];
+                delete data[oldName];
+                saveTheatersData(data);
+                loadAdminData('theaters');
+                updateSelectOptions();
+            }
+        }
+
+        function addCinema() {
+            const theater = document.getElementById('theaterSelectForCinema').value;
+            const name = document.getElementById('newCinemaName').value.trim();
+            if (!theater || !name) return alert('Select theater and enter cinema name');
+            const data = getTheatersData();
+            if (!data[theater][name]) data[theater][name] = {};
+            saveTheatersData(data);
+            document.getElementById('newCinemaName').value = '';
+            loadAdminData('cinemas');
+        }
+
+        function editCinema(theater, oldName) {
+            const newName = prompt('Enter new name for ' + oldName, oldName);
+            if (newName && newName !== oldName) {
+                const data = getTheatersData();
+                data[theater][newName] = data[theater][oldName];
+                delete data[theater][oldName];
+                saveTheatersData(data);
+                loadAdminData('cinemas');
+            }
+        }
+
+        function addMovie() {
+            const theater = document.getElementById('theaterSelectForMovie').value;
+            const cinema = document.getElementById('cinemaSelectForMovie').value;
+            const name = document.getElementById('newMovieName').value.trim();
+            if (!theater || !cinema || !name) return alert('Select theater, cinema, and enter movie name');
+            const data = getTheatersData();
+            if (!data[theater][cinema][name]) data[theater][cinema][name] = [];
+            saveTheatersData(data);
+            document.getElementById('newMovieName').value = '';
+            loadAdminData('movies');
+            updateReportFilters();
+        }
+
+        function editMovie(theater, cinema, oldName) {
+            const newName = prompt('Enter new name for ' + oldName, oldName);
+            if (newName && newName !== oldName) {
+                const data = getTheatersData();
+                data[theater][cinema][newName] = data[theater][cinema][oldName];
+                delete data[theater][cinema][oldName];
+                saveTheatersData(data);
+                loadAdminData('movies');
+                updateReportFilters();
+            }
+        }
+
+        function addShow() {
+            const theater = document.getElementById('theaterSelectForShow').value;
+            const cinema = document.getElementById('cinemaSelectForShow').value;
+            const movie = document.getElementById('movieSelectForShow').value;
+            const time = document.getElementById('newShowTime').value.trim();
+            if (!theater || !cinema || !movie || !time) return alert('Fill all fields');
+            const data = getTheatersData();
+            data[theater][cinema][movie].push(time);
+            saveTheatersData(data);
+            document.getElementById('newShowTime').value = '';
+            loadAdminData('shows');
+        }
+
+        function editShow(theater, cinema, movie, index, oldTime) {
+            const newTime = prompt('Enter new show time', oldTime);
+            if (newTime && newTime !== oldTime) {
+                const data = getTheatersData();
+                data[theater][cinema][movie][index] = newTime;
+                saveTheatersData(data);
+                loadAdminData('shows');
+            }
+        }
+
+        function deleteTheater(name) {
+            if (confirm(`Delete ${name}?`)) {
+                const data = getTheatersData();
+                delete data[name];
+                saveTheatersData(data);
+                loadAdminData('theaters');
+                updateSelectOptions();
+            }
+        }
+
+        function deleteCinema(theater, cinema) {
+            if (confirm(`Delete ${cinema}?`)) {
+                const data = getTheatersData();
+                delete data[theater][cinema];
+                saveTheatersData(data);
+                loadAdminData('cinemas');
+            }
+        }
+
+        function deleteMovie(theater, cinema, movie) {
+            if (confirm(`Delete ${movie}?`)) {
+                const data = getTheatersData();
+                delete data[theater][cinema][movie];
+                saveTheatersData(data);
+                loadAdminData('movies');
+            }
+        }
+
+        function deleteShow(theater, cinema, movie, index) {
+            if (confirm(`Delete show time ${index + 1}?`)) {
+                const data = getTheatersData();
+                data[theater][cinema][movie].splice(index, 1);
+                saveTheatersData(data);
+                loadAdminData('shows');
+            }
+        }
+
+        // Admin Select Event Listeners
+        document.getElementById('theaterSelectForCinema').addEventListener('change', () => loadAdminData('cinemas'));
+        document.getElementById('theaterSelectForMovie').addEventListener('change', function() {
+            const theater = this.value;
+            const data = getTheatersData();
+            document.getElementById('cinemaSelectForMovie').innerHTML = '<option value="">Select Cinema</option>' + 
+                Object.keys(data[theater] || {}).map(c => `<option value="${c}">${c}</option>`).join('');
+            loadAdminData('movies');
+        });
+        document.getElementById('cinemaSelectForMovie').addEventListener('change', () => loadAdminData('movies'));
+        document.getElementById('theaterSelectForShow').addEventListener('change', function() {
+            const theater = this.value;
+            const data = getTheatersData();
+            document.getElementById('cinemaSelectForShow').innerHTML = '<option value="">Select Cinema</option>' + 
+                Object.keys(data[theater] || {}).map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('movieSelectForShow').innerHTML = '<option value="">Select Movie</option>';
+            loadAdminData('shows');
+        });
+        document.getElementById('cinemaSelectForShow').addEventListener('change', function() {
+            const theater = document.getElementById('theaterSelectForShow').value;
+            const cinema = this.value;
+            const data = getTheatersData();
+            document.getElementById('movieSelectForShow').innerHTML = '<option value="">Select Movie</option>' + 
+                Object.keys(data[theater][cinema] || {}).map(m => `<option value="${m}">${m}</option>`).join('');
+            loadAdminData('shows');
+        });
+        document.getElementById('movieSelectForShow').addEventListener('change', () => loadAdminData('shows'));
+
+        // Admin Seats Management
+        let currentAdminSeats = {};
+        document.getElementById('theaterSelectForSeat').addEventListener('change', function() {
+            const theater = this.value;
+            const data = getTheatersData();
+            document.getElementById('cinemaSelectForSeat').innerHTML = '<option value="">Select Cinema</option>' + 
+                Object.keys(data[theater] || {}).map(c => `<option value="${c}">${c}</option>`).join('');
+            document.getElementById('movieSelectForSeat').innerHTML = '<option value="">Select Movie</option>';
+            document.getElementById('timingSelectForSeat').innerHTML = '<option value="">Select Show Timing</option>';
+            clearAdminSeats();
+        });
+        document.getElementById('cinemaSelectForSeat').addEventListener('change', function() {
+            const theater = document.getElementById('theaterSelectForSeat').value;
+            const cinema = this.value;
+            const data = getTheatersData();
+            document.getElementById('movieSelectForSeat').innerHTML = '<option value="">Select Movie</option>' + 
+                Object.keys(data[theater][cinema] || {}).map(m => `<option value="${m}">${m}</option>`).join('');
+            document.getElementById('timingSelectForSeat').innerHTML = '<option value="">Select Show Timing</option>';
+            clearAdminSeats();
+        });
+        document.getElementById('movieSelectForSeat').addEventListener('change', function() {
+            const theater = document.getElementById('theaterSelectForSeat').value;
+            const cinema = document.getElementById('cinemaSelectForSeat').value;
+            const movie = this.value;
+            const data = getTheatersData();
+            document.getElementById('timingSelectForSeat').innerHTML = '<option value="">Select Show Timing</option>' + 
+                (data[theater][cinema][movie] || []).map(t => `<option value="${t}">${t}</option>`).join('');
+            clearAdminSeats();
+        });
+        document.getElementById('timingSelectForSeat').addEventListener('change', loadAdminSeats);
+
+        function loadAdminSeats() {
+            const theater = document.getElementById('theaterSelectForSeat').value;
+            const cinema = document.getElementById('cinemaSelectForSeat').value;
+            const movie = document.getElementById('movieSelectForSeat').value;
+            const timing = document.getElementById('timingSelectForSeat').value;
+            if (!theater || !cinema || !movie || !timing) {
+                clearAdminSeats();
+                return;
+            }
+            const key = `${theater}-${cinema}-${movie}-${timing}`;
+            let seatsData = getSeatsData();
+            let vipSeats = seatsData[key + '-vip'] || Array(VIP_ROWS_COUNT).fill().map(() => Array(5).fill(0));
+            let normalSeats = seatsData[key + '-normal'] || Array(NORMAL_ROWS_COUNT).fill().map(() => Array(5).fill(0));
+            currentAdminSeats = { key, vipSeats, normalSeats, selectedSeats: [] };
+            renderAdminSeats(vipSeats, normalSeats);
+        }
+
+        function clearAdminSeats() {
+            document.getElementById('normalSeatsGridAdmin').innerHTML = '';
+            document.getElementById('vipSeatsGridAdmin').innerHTML = '';
+            document.getElementById('selectedSeatsAdmin').innerHTML = '';
+            document.getElementById('selectedCountAdmin').textContent = '0';
+            currentAdminSeats = {};
+        }
+
+        function renderAdminSeats(vipSeats, normalSeats) {
+            // Render Normal Seats
+            const normalContainer = document.getElementById('normalSeatsGridAdmin');
+            normalContainer.innerHTML = '';
+            const colLabels = document.createElement('div');
+            colLabels.className = 'seat-row justify-center';
+            for (let col = 1; col <= 5; col++) {
+                const label = document.createElement('div');
+                label.className = 'seat-label';
+                label.textContent = col;
+                colLabels.appendChild(label);
+            }
+            normalContainer.appendChild(colLabels);
+            for (let row = 0; row < NORMAL_ROWS_COUNT; row++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'seat-row';
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'seat-label';
+                rowLabel.textContent = String.fromCharCode(65 + row);
+                rowDiv.appendChild(rowLabel);
+                for (let col = 0; col < 5; col++) {
+                    const seat = document.createElement('div');
+                    seat.className = 'seat';
+                    seat.textContent = String.fromCharCode(65 + row) + (col + 1);
+                    const isVIP = false;
+                    const sectionSeats = normalSeats;
+                    if (sectionSeats[row][col] === 1) {
+                        seat.classList.add('seat-booked');
+                    } else {
+                        seat.classList.add('seat-available');
+                    }
+                    const isSelected = currentAdminSeats.selectedSeats.some(s => s.row === row && s.col === col && s.isVIP === isVIP);
+                    if (isSelected) {
+                        seat.classList.add('seat-selected');
+                    }
+                    seat.onclick = () => toggleAdminSeat(row, col, isVIP);
+                    rowDiv.appendChild(seat);
+                }
+                const selectRowBtn = document.createElement('button');
+                selectRowBtn.textContent = 'Select Row';
+                selectRowBtn.className = 'ml-2 p-1 bg-blue-600 rounded text-white text-xs';
+                selectRowBtn.onclick = () => selectAdminRow(row, false);
+                rowDiv.appendChild(selectRowBtn);
+                normalContainer.appendChild(rowDiv);
+            }
+
+            // Render VIP Seats
+            const vipContainer = document.getElementById('vipSeatsGridAdmin');
+            vipContainer.innerHTML = '';
+            const vipColLabels = document.createElement('div');
+            vipColLabels.className = 'seat-row justify-center';
+            for (let col = 1; col <= 5; col++) {
+                const label = document.createElement('div');
+                label.className = 'seat-label';
+                label.textContent = col;
+                vipColLabels.appendChild(label);
+            }
+            vipContainer.appendChild(vipColLabels);
+            for (let row = 0; row < VIP_ROWS_COUNT; row++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'seat-row';
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'seat-label';
+                rowLabel.textContent = 'VIP' + (row + 1);
+                rowDiv.appendChild(rowLabel);
+                for (let col = 0; col < 5; col++) {
+                    const seat = document.createElement('div');
+                    seat.className = 'seat';
+                    seat.textContent = 'VIP' + (row + 1) + '-' + (col + 1);
+                    const isVIP = true;
+                    const sectionSeats = vipSeats;
+                    if (sectionSeats[row][col] === 1) {
+                        seat.classList.add('seat-booked');
+                    } else {
+                        seat.classList.add('seat-vip');
+                    }
+                    const isSelected = currentAdminSeats.selectedSeats.some(s => s.row === row && s.col === col && s.isVIP === isVIP);
+                    if (isSelected) {
+                        seat.classList.add('seat-selected');
+                    }
+                    seat.onclick = () => toggleAdminSeat(row, col, isVIP);
+                    rowDiv.appendChild(seat);
+                }
+                const selectRowBtn = document.createElement('button');
+                selectRowBtn.textContent = 'Select Row';
+                selectRowBtn.className = 'ml-2 p-1 bg-blue-600 rounded text-white text-xs';
+                selectRowBtn.onclick = () => selectAdminRow(row, true);
+                rowDiv.appendChild(selectRowBtn);
+                vipContainer.appendChild(rowDiv);
+            }
+            updateAdminSelectedDisplay();
+        }
+
+        function selectAdminRow(row, isVIP) {
+            const sectionSeats = isVIP ? currentAdminSeats.vipSeats : currentAdminSeats.normalSeats;
+            const rowLength = 5;
+            for (let col = 0; col < rowLength; col++) {
+                if (sectionSeats[row][col] !== 1) { // not booked
+                    const index = currentAdminSeats.selectedSeats.findIndex(s => s.row === row && s.col === col && s.isVIP === isVIP);
+                    if (index === -1) {
+                        currentAdminSeats.selectedSeats.push({ row, col, isVIP, label: isVIP ? 'VIP' + (row + 1) + '-' + (col + 1) : String.fromCharCode(65 + row) + (col + 1) });
+                    }
+                }
+            }
+            renderAdminSeats(currentAdminSeats.vipSeats, currentAdminSeats.normalSeats);
+        }
+
+        function selectAllAvailableAdmin() {
+            const vipSeats = currentAdminSeats.vipSeats;
+            const normalSeats = currentAdminSeats.normalSeats;
+            for (let row = 0; row < NORMAL_ROWS_COUNT; row++) {
+                for (let col = 0; col < 5; col++) {
+                    if (normalSeats[row][col] === 0) {
+                        const index = currentAdminSeats.selectedSeats.findIndex(s => s.row === row && s.col === col && s.isVIP === false);
+                        if (index === -1) {
+                            currentAdminSeats.selectedSeats.push({ row, col, isVIP: false, label: String.fromCharCode(65 + row) + (col + 1) });
+                        }
+                    }
+                }
+            }
+            for (let row = 0; row < VIP_ROWS_COUNT; row++) {
+                for (let col = 0; col < 5; col++) {
+                    if (vipSeats[row][col] === 0) {
+                        const index = currentAdminSeats.selectedSeats.findIndex(s => s.row === row && s.col === col && s.isVIP === true);
+                        if (index === -1) {
+                            currentAdminSeats.selectedSeats.push({ row, col, isVIP: true, label: 'VIP' + (row + 1) + '-' + (col + 1) });
+                        }
+                    }
+                }
+            }
+            renderAdminSeats(currentAdminSeats.vipSeats, currentAdminSeats.normalSeats);
+        }
+
+        function toggleAdminSeat(row, col, isVIP) {
+            const index = currentAdminSeats.selectedSeats.findIndex(s => s.row === row && s.col === col && s.isVIP === isVIP);
+            if (index > -1) {
+                currentAdminSeats.selectedSeats.splice(index, 1);
+            } else {
+                currentAdminSeats.selectedSeats.push({ row, col, isVIP, label: isVIP ? 'VIP' + (row + 1) + '-' + (col + 1) : String.fromCharCode(65 + row) + (col + 1) });
+            }
+            renderAdminSeats(currentAdminSeats.vipSeats, currentAdminSeats.normalSeats);
+        }
+
+        function updateAdminSelectedDisplay() {
+            document.getElementById('selectedCountAdmin').textContent = currentAdminSeats.selectedSeats.length;
+            document.getElementById('selectedSeatsAdmin').innerHTML = currentAdminSeats.selectedSeats.map(s => 
+                `<div class="bg-yellow-500 text-black px-2 py-1 rounded mb-1">${s.label}</div>`
+            ).join('');
+        }
+
+        function markAsBooked() {
+            currentAdminSeats.selectedSeats.forEach(s => {
+                const section = s.isVIP ? currentAdminSeats.vipSeats : currentAdminSeats.normalSeats;
+                section[s.row][s.col] = 1;
+            });
+            currentAdminSeats.selectedSeats = [];
+            saveAdminSeats();
+            renderAdminSeats(currentAdminSeats.vipSeats, currentAdminSeats.normalSeats);
+        }
+
+        function markAsAvailable() {
+            currentAdminSeats.selectedSeats.forEach(s => {
+                const section = s.isVIP ? currentAdminSeats.vipSeats : currentAdminSeats.normalSeats;
+                section[s.row][s.col] = 0;
+            });
+            currentAdminSeats.selectedSeats = [];
+            saveAdminSeats();
+            renderAdminSeats(currentAdminSeats.vipSeats, currentAdminSeats.normalSeats);
+        }
+
+        function deselectAll() {
+            currentAdminSeats.selectedSeats = [];
+            renderAdminSeats(currentAdminSeats.vipSeats, currentAdminSeats.normalSeats);
+        }
+
+        function saveAdminSeats() {
+            const seatsData = getSeatsData();
+            seatsData[currentAdminSeats.key + '-vip'] = currentAdminSeats.vipSeats;
+            seatsData[currentAdminSeats.key + '-normal'] = currentAdminSeats.normalSeats;
+            saveSeatsData(seatsData);
+        }
+
+        // Booking Reports
+        document.getElementById('reportTheaterFilter').addEventListener('change', loadBookingReports);
+        document.getElementById('reportMovieFilter').addEventListener('change', loadBookingReports);
+
+        function updateReportFilters() {
+            const data = getTheatersData();
+            const theaters = Object.keys(data);
+            document.getElementById('reportTheaterFilter').innerHTML = '<option value="">All Theaters</option>' + 
+                theaters.map(t => `<option value="${t}">${t}</option>`).join('');
+
+            const movies = new Set();
+            for (const theater in data) {
+                for (const cinema in data[theater]) {
+                    for (const movie in data[theater][cinema]) {
+                        movies.add(movie);
+                    }
+                }
+            }
+            document.getElementById('reportMovieFilter').innerHTML = '<option value="">All Movies</option>' + 
+                Array.from(movies).map(m => `<option value="${m}">${m}</option>`).join('');
+        }
+
+        function loadBookingReports() {
+            const bookings = JSON.parse(localStorage.getItem(BOOKINGS_KEY) || '[]');
+            const theaterFilter = document.getElementById('reportTheaterFilter').value;
+            const movieFilter = document.getElementById('reportMovieFilter').value;
+
+            const filtered = bookings.filter(b => 
+                (!theaterFilter || b.theater === theaterFilter) && 
+                (!movieFilter || b.movie === movieFilter)
+            );
+
+            document.getElementById('reportTableBody').innerHTML = filtered.map(b => `
+                <tr>
+                    <td>${b.bookingId}</td>
+                    <td>${b.theater}</td>
+                    <td>${b.cinema}</td>
+                    <td>${b.movie}</td>
+                    <td>${b.timing}</td>
+                    <td>${b.selectedSeats.map(s => s.label).join(', ')}</td>
+                    <td>${b.totalAmount}</td>
+                    <td>${b.customerDetails.name}</td>
+                    <td>${b.customerDetails.phone}</td>
+                    <td>${b.customerDetails.email}</td>
+                </tr>
+            `).join('') || '<tr><td colspan="10" class="text-center">No bookings found.</td></tr>';
+        }
+
+        function downloadReportCSV() {
+            const bookings = JSON.parse(localStorage.getItem(BOOKINGS_KEY) || '[]');
+            const theaterFilter = document.getElementById('reportTheaterFilter').value;
+            const movieFilter = document.getElementById('reportMovieFilter').value;
+
+            const filtered = bookings.filter(b => 
+                (!theaterFilter || b.theater === theaterFilter) && 
+                (!movieFilter || b.movie === movieFilter)
+            );
+
+            let csv = 'Booking ID,Theater,Cinema,Movie,Show Time,Seats,Total (₹),Name,Phone,Email\n';
+            filtered.forEach(b => {
+                csv += `${b.bookingId},${b.theater},${b.cinema},${b.movie},${b.timing},"${b.selectedSeats.map(s => s.label).join(', ')}",${b.totalAmount},${b.customerDetails.name},${b.customerDetails.phone},${b.customerDetails.email}\n`;
+            });
+
+            const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = 'booking_report.csv';
+            link.click();
+        }
+
+        // CUSTOMER BOOKING FUNCTIONS
+        let currentBooking = {
+            theater: null,
+            cinema: null,
+            movie: null,
+            timing: null,
+            selectedSeats: [],
+            ticketCount: 1,
+            bookingId: null,
+            vipSeats: null,
+            normalSeats: null,
+            totalAmount: 0
+        };
+
+        function showStep(stepName) {
+            document.querySelectorAll('.booking-step').forEach(step => step.classList.add('hidden'));
+            document.getElementById(`step${stepName.charAt(0).toUpperCase() + stepName.slice(1)}`).classList.remove('hidden');
+            // Clear previous step content
+            if (stepName === 'theater') {
+                document.getElementById('cinemaList').innerHTML = '';
+                document.getElementById('movieList').innerHTML = '';
+                document.getElementById('timingList').innerHTML = '';
+                document.getElementById('normalSeatsGrid').innerHTML = '';
+                document.getElementById('vipSeatsGrid').innerHTML = '';
+                document.getElementById('selectedSeats').innerHTML = '';
+                document.getElementById('bookingSummary').innerHTML = '';
+            } else if (stepName === 'cinema') {
+                document.getElementById('movieList').innerHTML = '';
+                document.getElementById('timingList').innerHTML = '';
+                document.getElementById('normalSeatsGrid').innerHTML = '';
+                document.getElementById('vipSeatsGrid').innerHTML = '';
+                document.getElementById('selectedSeats').innerHTML = '';
+                document.getElementById('bookingSummary').innerHTML = '';
+            } else if (stepName === 'movie') {
+                document.getElementById('timingList').innerHTML = '';
+                document.getElementById('normalSeatsGrid').innerHTML = '';
+                document.getElementById('vipSeatsGrid').innerHTML = '';
+                document.getElementById('selectedSeats').innerHTML = '';
+                document.getElementById('bookingSummary').innerHTML = '';
+            } else if (stepName === 'timing') {
+                document.getElementById('normalSeatsGrid').innerHTML = '';
+                document.getElementById('vipSeatsGrid').innerHTML = '';
+                document.getElementById('selectedSeats').innerHTML = '';
+                document.getElementById('bookingSummary').innerHTML = '';
+            }
+        }
+
+        function goBack(currentStep) {
+            switch (currentStep) {
+                case 'cinema': showStep('theater'); break;
+                case 'movie': showStep('cinema'); break;
+                case 'timing': showStep('movie'); break;
+                case 'seats': showStep('timing'); break;
+                case 'contact': showStep('seats'); break;
+            }
+        }
+
+        function loadTheaters() {
+            const data = getTheatersData();
+            const container = document.getElementById('theaterList');
+            container.innerHTML = Object.keys(data).map(t => 
+                `<div class="p-4 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition duration-200" onclick="selectTheater('${t}')">
+                    <h4 class="font-semibold mb-2">${t}</h4>
+                    <p class="text-sm text-gray-400">Multiple cinemas available</p>
+                </div>`
+            ).join('') || '<p class="text-gray-400">No theaters available. Please contact admin.</p>';
+        }
+
+        function selectTheater(theater) {
+            currentBooking.theater = theater;
+            showStep('cinema');
+            document.getElementById('cinemaTitle').textContent = `${theater} - Select Cinema`;
+            loadCinemas();
+        }
+
+        function loadCinemas() {
+            const data = getTheatersData();
+            const container = document.getElementById('cinemaList');
+            container.innerHTML = Object.keys(data[currentBooking.theater] || {}).map(c => 
+                `<div class="p-4 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition duration-200" onclick="selectCinema('${c}')">
+                    <h5 class="font-semibold">${c}</h5>
+                </div>`
+            ).join('') || '<p class="text-gray-400">No cinemas available. Please contact admin.</p>';
+        }
+
+        function selectCinema(cinema) {
+            currentBooking.cinema = cinema;
+            showStep('movie');
+            document.getElementById('movieTitle').textContent = `${currentBooking.theater} - ${cinema} - Select Movie`;
+            loadMovies();
+        }
+
+        function loadMovies() {
+            const data = getTheatersData();
+            const container = document.getElementById('movieList');
+            container.innerHTML = Object.keys(data[currentBooking.theater][currentBooking.cinema] || {}).map(m => 
+                `<div class="p-4 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition duration-200" onclick="selectMovie('${m}')">
+                    <h5 class="font-semibold">${m}</h5>
+                </div>`
+            ).join('') || '<p class="text-gray-400">No movies available. Please contact admin.</p>';
+        }
+
+        function selectMovie(movie) {
+            currentBooking.movie = movie;
+            showStep('timing');
+            document.getElementById('timingTitle').textContent = `${currentBooking.theater} - ${currentBooking.cinema} - ${movie} - Select Show`;
+            loadTimings();
+        }
+
+        function loadTimings() {
+            const data = getTheatersData();
+            const timings = data[currentBooking.theater][currentBooking.cinema][currentBooking.movie] || [];
+            const container = document.getElementById('timingList');
+            container.innerHTML = timings.map(t => 
+                `<div class="p-3 bg-gray-800 rounded-lg cursor-pointer hover:bg-gray-700 transition duration-200 text-center" onclick="selectTiming('${t}')">
+                    <div class="font-semibold">${t}</div>
+                </div>`
+            ).join('') || '<p class="text-gray-400">No show timings available. Please contact admin.</p>';
+        }
+
+        function selectTiming(timing) {
+            currentBooking.timing = timing;
+            showStep('seats');
+            document.getElementById('seatsTitle').textContent = `Select Seats - ${currentBooking.movie} (${currentBooking.timing})`;
+            initializeSeats();
+        }
+
+        function initializeSeats() {
+            const key = `${currentBooking.theater}-${currentBooking.cinema}-${currentBooking.movie}-${currentBooking.timing}`;
+            let vipSeats = getSeatsData()[key + '-vip'];
+            let normalSeats = getSeatsData()[key + '-normal'];
+            if (!vipSeats || !normalSeats) {
+                vipSeats = Array(VIP_ROWS_COUNT).fill().map(() => Array(5).fill(0));
+                normalSeats = Array(NORMAL_ROWS_COUNT).fill().map(() => Array(5).fill(0));
+                const seatsData = getSeatsData();
+                seatsData[key + '-vip'] = vipSeats;
+                seatsData[key + '-normal'] = normalSeats;
+                saveSeatsData(seatsData);
+            }
+            currentBooking.vipSeats = vipSeats;
+            currentBooking.normalSeats = normalSeats;
+            renderSeats();
+        }
+
+        function renderSeats() {
+            // Render Normal Seats
+            const normalContainer = document.getElementById('normalSeatsGrid');
+            normalContainer.innerHTML = '';
+            const colLabels = document.createElement('div');
+            colLabels.className = 'flex justify-center mb-1';
+            colLabels.style = 'display: flex; align-items: center; justify-content: center;';
+            for (let col = 1; col <= 5; col++) {
+                const label = document.createElement('div');
+                label.className = 'seat-label w-8 mx-1';
+                label.textContent = col;
+                colLabels.appendChild(label);
+            }
+            normalContainer.appendChild(colLabels);
+            for (let row = 0; row < NORMAL_ROWS_COUNT; row++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex items-center mb-1';
+                rowDiv.style = 'display: flex; align-items: center;';
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'seat-label w-8 mr-2 text-right';
+                rowLabel.textContent = String.fromCharCode(65 + row);
+                rowDiv.appendChild(rowLabel);
+                for (let col = 0; col < 5; col++) {
+                    const seat = document.createElement('div');
+                    seat.className = 'seat mx-1 rounded flex items-center justify-center';
+                    const label = String.fromCharCode(65 + row) + (col + 1);
+                    seat.textContent = label;
+                    const isVIP = false;
+                    const sectionSeats = currentBooking.normalSeats;
+                    if (sectionSeats[row][col] === 1) {
+                        seat.className += ' seat-booked';
+                    } else if (sectionSeats[row][col] === 2) {
+                        seat.className += ' seat-selected';
+                    } else {
+                        seat.className += ' seat-available hover:scale-110 transition duration-200';
+                        seat.onclick = () => toggleSeat(row, col, isVIP);
+                    }
+                    rowDiv.appendChild(seat);
+                }
+                const selectRowBtn = document.createElement('button');
+                selectRowBtn.textContent = 'Select Row';
+                selectRowBtn.className = 'ml-2 p-1 bg-blue-600 rounded text-white text-xs';
+                selectRowBtn.onclick = () => selectRow(row, false);
+                rowDiv.appendChild(selectRowBtn);
+                normalContainer.appendChild(rowDiv);
+            }
+
+            // Render VIP Seats
+            const vipContainer = document.getElementById('vipSeatsGrid');
+            vipContainer.innerHTML = '';
+            const vipColLabels = document.createElement('div');
+            vipColLabels.className = 'flex justify-center mb-1';
+            vipColLabels.style = 'display: flex; align-items: center; justify-content: center;';
+            for (let col = 1; col <= 5; col++) {
+                const label = document.createElement('div');
+                label.className = 'seat-label w-8 mx-1';
+                label.textContent = col;
+                vipColLabels.appendChild(label);
+            }
+            vipContainer.appendChild(vipColLabels);
+            for (let row = 0; row < VIP_ROWS_COUNT; row++) {
+                const rowDiv = document.createElement('div');
+                rowDiv.className = 'flex items-center mb-1';
+                rowDiv.style = 'display: flex; align-items: center;';
+                const rowLabel = document.createElement('div');
+                rowLabel.className = 'seat-label w-8 mr-2 text-right';
+                rowLabel.textContent = 'VIP' + (row + 1);
+                rowDiv.appendChild(rowLabel);
+                for (let col = 0; col < 5; col++) {
+                    const seat = document.createElement('div');
+                    seat.className = 'seat mx-1 rounded flex items-center justify-center';
+                    const label = 'VIP' + (row + 1) + '-' + (col + 1);
+                    seat.textContent = label;
+                    const isVIP = true;
+                    const sectionSeats = currentBooking.vipSeats;
+                    if (sectionSeats[row][col] === 1) {
+                        seat.className += ' seat-booked';
+                    } else if (sectionSeats[row][col] === 2) {
+                        seat.className += ' seat-selected';
+                    } else {
+                        seat.className += ' seat-vip hover:scale-110 transition duration-200';
+                        seat.onclick = () => toggleSeat(row, col, isVIP);
+                    }
+                    rowDiv.appendChild(seat);
+                }
+                const selectRowBtn = document.createElement('button');
+                selectRowBtn.textContent = 'Select Row';
+                selectRowBtn.className = 'ml-2 p-1 bg-blue-600 rounded text-white text-xs';
+                selectRowBtn.onclick = () => selectRow(row, true);
+                rowDiv.appendChild(selectRowBtn);
+                vipContainer.appendChild(rowDiv);
+            }
+            updateSelectedSeatsDisplay();
+        }
+
+        function selectRow(row, isVIP) {
+            const sectionSeats = isVIP ? currentBooking.vipSeats : currentBooking.normalSeats;
+            const rowLength = 5;
+            for (let col = 0; col < rowLength; col++) {
+                if (sectionSeats[row][col] === 0) {
+                    sectionSeats[row][col] = 2;
+                    currentBooking.selectedSeats.push({ row, col, isVIP, label: isVIP ? 'VIP' + (row + 1) + '-' + (col + 1) : String.fromCharCode(65 + row) + (col + 1) });
+                }
+            }
+            renderSeats();
+        }
+
+        function selectAllAvailable() {
+            const vipSeats = currentBooking.vipSeats;
+            const normalSeats = currentBooking.normalSeats;
+            for (let row = 0; row < NORMAL_ROWS_COUNT; row++) {
+                for (let col = 0; col < 5; col++) {
+                    if (normalSeats[row][col] === 0) {
+                        normalSeats[row][col] = 2;
+                        currentBooking.selectedSeats.push({ row, col, isVIP: false, label: String.fromCharCode(65 + row) + (col + 1) });
+                    }
+                }
+            }
+            for (let row = 0; row < VIP_ROWS_COUNT; row++) {
+                for (let col = 0; col < 5; col++) {
+                    if (vipSeats[row][col] === 0) {
+                        vipSeats[row][col] = 2;
+                        currentBooking.selectedSeats.push({ row, col, isVIP: true, label: 'VIP' + (row + 1) + '-' + (col + 1) });
+                    }
+                }
+            }
+            renderSeats();
+        }
+
+        function deselectAllSeats() {
+            currentBooking.selectedSeats = [];
+            currentBooking.vipSeats.forEach(row => row.fill(0, 0, row.length));
+            currentBooking.normalSeats.forEach(row => row.fill(0, 0, row.length));
+            renderSeats();
+        }
+
+        function toggleSeat(row, col, isVIP) {
+            const sectionSeats = isVIP ? currentBooking.vipSeats : currentBooking.normalSeats;
+            if (sectionSeats[row][col] === 0) {
+                sectionSeats[row][col] = 2;
+                currentBooking.selectedSeats.push({ row, col, isVIP, label: isVIP ? 'VIP' + (row + 1) + '-' + (col + 1) : String.fromCharCode(65 + row) + (col + 1) });
+            } else if (sectionSeats[row][col] === 2) {
+                sectionSeats[row][col] = 0;
+                currentBooking.selectedSeats = currentBooking.selectedSeats.filter(s => s.row !== row || s.col !== col || s.isVIP !== isVIP);
+            }
+            renderSeats();
+        }
+
+        function updateSelectedSeatsDisplay() {
+            const count = currentBooking.selectedSeats.length;
+            document.getElementById('selectedCount').textContent = count;
+            document.getElementById('selectedSeats').innerHTML = currentBooking.selectedSeats.map(s => 
+                `<div class="bg-yellow-500 text-black px-2 py-1 rounded mb-1">${s.label}</div>`
+            ).join('');
+            const ticketCount = parseInt(document.getElementById('ticketCount').value) || 1;
+            let total = 0;
+            currentBooking.selectedSeats.forEach(s => {
+                total += s.isVIP ? VIP_PRICE : NORMAL_PRICE;
+            });
+            currentBooking.totalAmount = total;
+            document.getElementById('totalAmount').textContent = total;
+            document.getElementById('previewBtn').classList.toggle('hidden', count === 0);
+        }
+
+        function proceedToPayment() {
+            const ticketCount = parseInt(document.getElementById('ticketCount').value) || 1;
+            if (currentBooking.selectedSeats.length !== ticketCount) {
+                alert(`Please select exactly ${ticketCount} seats.`);
+                return;
+            }
+            currentBooking.ticketCount = ticketCount;
+            showStep('contact');
+            loadBookingSummary();
+        }
+
+        function loadBookingSummary() {
+            const summary = document.getElementById('bookingSummary');
+            summary.innerHTML = `
+                <div>Theater: ${currentBooking.theater}</div>
+                <div>Cinema: ${currentBooking.cinema}</div>
+                <div>Movie: ${currentBooking.movie}</div>
+                <div>Show: ${currentBooking.timing}</div>
+                <div>Seats: ${currentBooking.selectedSeats.map(s => s.label).join(', ')}</div>
+                <div class="font-semibold mt-2">Total: ₹${currentBooking.totalAmount}</div>
+            `;
+        }
+
+        function validateContactDetails(name, phone, email) {
+            const errors = [];
+            if (!name || name.length < 2) errors.push('Name must be at least 2 characters.');
+            if (!phone || !/^\d{10}$/.test(phone)) errors.push('Phone must be a 10-digit number.');
+            if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push('Invalid email address.');
+            return { isValid: errors.length === 0, errors };
+        }
+
+        function sendBookingEmail(bookingDetails) {
+            console.log('Simulating email send to:', bookingDetails.customerDetails.email);
+            console.log('Email content:', {
+                subject: 'Prime Tickets - Booking Confirmation',
+                body: `
+Dear ${bookingDetails.customerDetails.name},
+
+Your booking has been confirmed with the following details:
+
+Booking ID: ${bookingDetails.bookingId}
+Theater: ${bookingDetails.theater}
+Cinema: ${bookingDetails.cinema}
+Movie: ${bookingDetails.movie}
+Show Time: ${bookingDetails.timing}
+Seats: ${bookingDetails.selectedSeats.map(s => s.label).join(', ')}
+Total: ₹${bookingDetails.totalAmount}
+Phone: ${bookingDetails.customerDetails.phone}
+Email: ${bookingDetails.customerDetails.email}
+
+Thank you for choosing Prime Tickets!
+                `.trim()
+            });
+            return true; // Simulate successful email send
+        }
+
+        function sendBookingSMS(bookingDetails) {
+            console.log('Simulating SMS send to:', bookingDetails.customerDetails.phone);
+            console.log('SMS content:', `Your booking ${bookingDetails.bookingId} for ${bookingDetails.movie} at ${bookingDetails.timing} is confirmed. Seats: ${bookingDetails.selectedSeats.map(s => s.label).join(', ')}. Total: ₹${bookingDetails.totalAmount}. Thank you!`);
+            return true; // Simulate successful SMS send
+        }
+
+        function confirmBooking() {
+            const name = document.getElementById('customerName').value.trim();
+            const phone = document.getElementById('phoneNumber').value.trim();
+            const email = document.getElementById('customerEmail').value.trim();
+            const errorEl = document.getElementById('contactError');
+            
+            const validation = validateContactDetails(name, phone, email);
+            if (!validation.isValid) {
+                errorEl.textContent = validation.errors.join(' ');
+                errorEl.classList.remove('hidden');
+                console.error('Contact Validation Errors:', validation.errors);
+                return;
+            }
+            errorEl.classList.add('hidden');
+            currentBooking.customerDetails = { name, phone, email };
+            
+            const options = {
+                "key": "rzp_test_your_key_id", // Replace with your actual Razorpay key
+                "amount": currentBooking.totalAmount * 100,
+                "currency": "INR",
+                "name": "Prime Tickets",
+                "description": `Movie Ticket for ${currentBooking.movie}`,
+                "handler": function (response) {
+                    const paymentId = response.razorpay_payment_id;
+                    alert(`Payment successful! Payment ID: ${paymentId}`);
+                    saveBookedSeats();
+                    currentBooking.bookingId = 'PT' + Date.now();
+                    const bookings = JSON.parse(localStorage.getItem(BOOKINGS_KEY) || '[]');
+                    bookings.push({ ...currentBooking });
+                    localStorage.setItem(BOOKINGS_KEY, JSON.stringify(bookings));
+                    if (sendBookingEmail(currentBooking)) {
+                        document.getElementById('emailNotification').classList.remove('hidden');
+                        document.getElementById('emailSentTo').textContent = email;
+                    } else {
+                        alert('Failed to send booking confirmation email.');
+                    }
+                    if (sendBookingSMS(currentBooking)) {
+                        document.getElementById('smsNotification').classList.remove('hidden');
+                        document.getElementById('smsSentTo').textContent = phone;
+                    } else {
+                        alert('Failed to send booking confirmation SMS.');
+                    }
+                    showStep('confirmation');
+                    showConfirmation();
+                },
+                "prefill": {
+                    "name": name,
+                    "email": email,
+                    "contact": phone
+                },
+                "theme": {
+                    "color": "#FF0000"
+                },
+                "modal": {
+                    "ondismiss": function() {
+                        alert('Payment cancelled.');
+                    }
+                }
+            };
+
+            try {
+                if (!window.Razorpay) {
+                    throw new Error('Razorpay SDK not loaded.');
+                }
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response) {
+                    let errorMsg = response.error.description || 'Payment failed. Please try again.';
+                    switch (response.error.code) {
+                        case 'BAD_REQUEST_ERROR':
+                            errorMsg = 'Invalid payment details. Please check card info.';
+                            break;
+                        case 'SERVER_ERROR':
+                            errorMsg = 'Server error. Please try again later.';
+                            break;
+                        case 'NETWORK_ERROR':
+                            errorMsg = 'Network issue. Check your internet connection.';
+                            break;
+                        default:
+                            errorMsg = 'Payment failed: ' + errorMsg;
+                    }
+                    alert(errorMsg);
+                    console.error('Razorpay Payment Error:', response.error);
+                    document.getElementById('contactError').textContent = errorMsg;
+                    document.getElementById('contactError').classList.remove('hidden');
+                });
+                rzp.open();
+            } catch (error) {
+                console.error('Razorpay initialization error:', error);
+                document.getElementById('contactError').textContent = 'Payment processing unavailable. Please try again later.';
+                document.getElementById('contactError').classList.remove('hidden');
+            }
+        }
+
+        function saveBookedSeats() {
+            const key = `${currentBooking.theater}-${currentBooking.cinema}-${currentBooking.movie}-${currentBooking.timing}`;
+            const seatsData = getSeatsData();
+            const vipSeats = currentBooking.vipSeats || [];
+            const normalSeats = currentBooking.normalSeats || [];
+            currentBooking.selectedSeats.forEach(s => {
+                if (s.isVIP) {
+                    vipSeats[s.row][s.col] = 1;
+                } else {
+                    normalSeats[s.row][s.col] = 1;
+                }
+            });
+            seatsData[key + '-vip'] = vipSeats;
+            seatsData[key + '-normal'] = normalSeats;
+            saveSeatsData(seatsData);
+        }
+
+        function showConfirmation() {
+            document.getElementById('confirmationDetails').innerHTML = `
+                <div class="text-left space-y-3">
+                    <div><strong>Booking ID:</strong> ${currentBooking.bookingId}</div>
+                    <div><strong>Theater:</strong> ${currentBooking.theater}</div>
+                    <div><strong>Cinema:</strong> ${currentBooking.cinema}</div>
+                    <div><strong>Movie:</strong> ${currentBooking.movie}</div>
+                    <div><strong>Show Time:</strong> ${currentBooking.timing}</div>
+                    <div><strong>Seats:</strong> ${currentBooking.selectedSeats.map(s => s.label).join(', ')}</div>
+                    <div><strong>Total:</strong> ₹${currentBooking.totalAmount}</div>
+                    <div class="mt-4 pt-4 border-t border-gray-600">
+                        <div><strong>Name:</strong> ${currentBooking.customerDetails.name}</div>
+                        <div><strong>Phone:</strong> ${currentBooking.customerDetails.phone}</div>
+                        <div><strong>Email:</strong> ${currentBooking.customerDetails.email}</div>
+                    </div>
+                </div>
+            `;
+            generateQRCode();
+        }
+
+        function generateQRCode() {
+            const qrText = `
+Booking ID: ${currentBooking.bookingId}
+Theater: ${currentBooking.theater}
+Cinema: ${currentBooking.cinema}
+Movie: ${currentBooking.movie}
+Show Time: ${currentBooking.timing}
+Seats: ${currentBooking.selectedSeats.map(s => s.label).join(', ')}
+Total: ₹${currentBooking.totalAmount}
+Name: ${currentBooking.customerDetails.name}
+Phone: ${currentBooking.customerDetails.phone}
+Email: ${currentBooking.customerDetails.email}
+            `.trim();
+            const qrCodeDiv = document.getElementById('qrCode');
+            qrCodeDiv.innerHTML = '';
+            new QRCode(qrCodeDiv, {
+                text: qrText,
+                width: 200,
+                height: 200,
+                colorDark: "#000000",
+                colorLight: "#ffffff",
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        function resetBooking() {
+            currentBooking = {
+                theater: null,
+                cinema: null,
+                movie: null,
+                timing: null,
+                selectedSeats: [],
+                ticketCount: 1,
+                bookingId: null,
+                vipSeats: null,
+                normalSeats: null,
+                totalAmount: 0
+            };
+            showStep('theater');
+            loadTheaters();
+            document.getElementById('customerName').value = '';
+            document.getElementById('phoneNumber').value = '';
+            document.getElementById('customerEmail').value = '';
+            document.getElementById('emailNotification').classList.add('hidden');
+            document.getElementById('smsNotification').classList.add('hidden');
+            document.getElementById('contactError').classList.add('hidden');
+        }
+
+        // Event Listeners
+        document.getElementById('ticketCount').addEventListener('input', updateSelectedSeatsDisplay);
+
+        // Initialize
+        window.onload = () => {
+            initializeDefaultData();
+            initializeUsers();
+            renderScreen();
+        };
+    </script>
+</body>
+</html>
